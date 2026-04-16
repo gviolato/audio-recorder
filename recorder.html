@@ -1,49 +1,103 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Audio Recorder</title>
+  <title>Gravador de Áudio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
-    body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center;
-           justify-content: center; min-height: 100vh; margin: 0; background: #f0f4ff; }
-    h3 { margin-bottom: 1.5rem; color: #333; }
-    #recordBtn { padding: 0.75rem 1.5rem; background: #e44; color: white; border: none;
-                 cursor: pointer; border-radius: 6px; font-size: 1rem; }
-    #recordBtn.recording { background: #888; }
-    #stopBtn   { padding: 0.75rem 1.5rem; background: #555; color: white; border: none;
-                 cursor: pointer; border-radius: 6px; font-size: 1rem; display: none; }
-    #timer     { margin: 1rem 0; font-size: 1.1rem; font-variant-numeric: tabular-nums; color: #555; }
-    #audioPlayback { width: 100%; max-width: 300px; margin: 1rem 0; display: none; }
-    #sendBtn   { padding: 0.75rem 1.5rem; background: #007BFF; color: white; border: none;
-                 cursor: pointer; border-radius: 6px; font-size: 1rem; display: none; }
-    #status    { margin-top: 1rem; font-size: 0.9rem; color: #555; }
-    .controls  { display: flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center; }
+    :root {
+      --green: hsl(152, 75%, 22%);
+      --green-light: hsl(152, 75%, 28%);
+      --red:   hsl(0, 72%, 51%);
+      --bg:    hsl(45, 15%, 96%);
+      --card:  #ffffff;
+      --border:hsl(45, 12%, 87%);
+      --fg:    hsl(150, 25%, 10%);
+      --fg-muted: hsl(150, 15%, 40%);
+      --radius: 10px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 1.5rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 4px 24px -4px rgba(19,32,26,.10);
+      padding: 2rem;
+      width: 100%;
+      max-width: 380px;
+      text-align: center;
+    }
+    h3 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--green);
+      margin-bottom: 1.5rem;
+    }
+    .controls { display: flex; justify-content: center; gap: .75rem; flex-wrap: wrap; }
+    button {
+      padding: .55rem 1.1rem;
+      border: none;
+      border-radius: calc(var(--radius) - 2px);
+      font-family: inherit;
+      font-size: .9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    #recordBtn { background: var(--red); color: #fff; }
+    #recordBtn:hover { background: hsl(0,72%,44%); }
+    #stopBtn   { background: hsl(150,15%,40%); color: #fff; display: none; }
+    #stopBtn:hover { background: hsl(150,15%,32%); }
+    #sendBtn   { background: var(--green); color: #fff; display: none; width: 100%; margin-top: .75rem; }
+    #sendBtn:hover { background: var(--green-light); }
+    #sendBtn:disabled { background: var(--border); color: var(--fg-muted); cursor: default; }
+    #timer {
+      font-size: 1rem;
+      font-variant-numeric: tabular-nums;
+      color: var(--fg-muted);
+      margin: .85rem 0;
+    }
+    #audioPlayback { width: 100%; margin: .75rem 0; display: none; }
+    #status { font-size: .82rem; color: var(--fg-muted); margin-top: .5rem; min-height: 1.1em; }
   </style>
 </head>
 <body>
-  <h3>🎙 Record Audio</h3>
-  <div class="controls">
-    <button id="recordBtn">● Record</button>
-    <button id="stopBtn">■ Stop</button>
+  <div class="card">
+    <h3>🎙 Gravação de Áudio</h3>
+    <div class="controls">
+      <button id="recordBtn">● Gravar</button>
+      <button id="stopBtn">■ Parar</button>
+    </div>
+    <div id="timer">0:00 / 2:00</div>
+    <audio id="audioPlayback" controls></audio>
+    <button id="sendBtn">✔ Usar esta gravação</button>
+    <div id="status"></div>
   </div>
-  <div id="timer">0:00 / 2:00</div>
-  <audio id="audioPlayback" controls></audio>
-  <button id="sendBtn">✔ Use this recording</button>
-  <div id="status"></div>
 
   <script>
-    const MAX_SECONDS = 120;
-    const recordBtn   = document.getElementById('recordBtn');
-    const stopBtn     = document.getElementById('stopBtn');
-    const timerEl     = document.getElementById('timer');
-    const playback    = document.getElementById('audioPlayback');
-    const sendBtn     = document.getElementById('sendBtn');
-    const statusEl    = document.getElementById('status');
+    const MAX_SECONDS   = 120;
+    const recordBtn     = document.getElementById('recordBtn');
+    const stopBtn       = document.getElementById('stopBtn');
+    const timerEl       = document.getElementById('timer');
+    const playback      = document.getElementById('audioPlayback');
+    const sendBtn       = document.getElementById('sendBtn');
+    const statusEl      = document.getElementById('status');
 
     let mediaRecorder, audioChunks = [], audioBlob = null, timerInterval, elapsed = 0;
 
-    function fmt(s) { return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); }
+    function fmt(s) { return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
 
     recordBtn.addEventListener('click', async function() {
       try {
@@ -56,12 +110,11 @@
           audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
           playback.src = URL.createObjectURL(audioBlob);
           playback.style.display = 'block';
-          sendBtn.style.display = 'inline-block';
-          statusEl.textContent = 'Recording ready. Preview it above, then click "Use this recording".';
+          sendBtn.style.display = 'block';
+          statusEl.textContent = 'Gravação pronta. Ouça acima e clique em "Usar esta gravação".';
         };
         mediaRecorder.start();
         elapsed = 0;
-        recordBtn.classList.add('recording');
         recordBtn.disabled = true;
         stopBtn.style.display = 'inline-block';
         sendBtn.style.display = 'none';
@@ -71,8 +124,8 @@
           timerEl.textContent = fmt(elapsed) + ' / ' + fmt(MAX_SECONDS);
           if (elapsed >= MAX_SECONDS) stopRecording();
         }, 1000);
-      } catch(err) {
-        statusEl.textContent = 'Microphone error: ' + err.message;
+      } catch (err) {
+        statusEl.textContent = 'Erro ao acessar microfone: ' + err.message;
       }
     });
 
@@ -80,23 +133,22 @@
       clearInterval(timerInterval);
       if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
       stopBtn.style.display = 'none';
-      recordBtn.classList.remove('recording');
       recordBtn.disabled = false;
     }
     stopBtn.addEventListener('click', stopRecording);
 
     sendBtn.addEventListener('click', function() {
       if (!audioBlob) return;
-      statusEl.textContent = 'Sending to form…';
+      statusEl.textContent = 'Enviando para o formulário…';
       sendBtn.disabled = true;
       const reader = new FileReader();
       reader.onloadend = function() {
         if (window.opener) {
           window.opener.postMessage({ type: 'AUDIO_DATA', dataUrl: reader.result }, '*');
-          statusEl.textContent = 'Sent! This window will close.';
+          statusEl.textContent = 'Enviado! Esta janela será fechada.';
           setTimeout(() => window.close(), 800);
         } else {
-          statusEl.textContent = 'Error: could not reach the parent window.';
+          statusEl.textContent = 'Erro: não foi possível comunicar com a janela principal.';
           sendBtn.disabled = false;
         }
       };
