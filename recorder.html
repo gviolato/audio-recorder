@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Audio Recorder</title>
+  <style>
+    body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center;
+           justify-content: center; min-height: 100vh; margin: 0; background: #f0f4ff; }
+    h3 { margin-bottom: 1.5rem; color: #333; }
+    #recordBtn { padding: 0.75rem 1.5rem; background: #e44; color: white; border: none;
+                 cursor: pointer; border-radius: 6px; font-size: 1rem; }
+    #recordBtn.recording { background: #888; }
+    #stopBtn   { padding: 0.75rem 1.5rem; background: #555; color: white; border: none;
+                 cursor: pointer; border-radius: 6px; font-size: 1rem; display: none; }
+    #timer     { margin: 1rem 0; font-size: 1.1rem; font-variant-numeric: tabular-nums; color: #555; }
+    #audioPlayback { width: 100%; max-width: 300px; margin: 1rem 0; display: none; }
+    #sendBtn   { padding: 0.75rem 1.5rem; background: #007BFF; color: white; border: none;
+                 cursor: pointer; border-radius: 6px; font-size: 1rem; display: none; }
+    #status    { margin-top: 1rem; font-size: 0.9rem; color: #555; }
+    .controls  { display: flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center; }
+  </style>
+</head>
+<body>
+  <h3>🎙 Record Audio</h3>
+  <div class="controls">
+    <button id="recordBtn">● Record</button>
+    <button id="stopBtn">■ Stop</button>
+  </div>
+  <div id="timer">0:00 / 2:00</div>
+  <audio id="audioPlayback" controls></audio>
+  <button id="sendBtn">✔ Use this recording</button>
+  <div id="status"></div>
+
+  <script>
+    const MAX_SECONDS = 120;
+    const recordBtn   = document.getElementById('recordBtn');
+    const stopBtn     = document.getElementById('stopBtn');
+    const timerEl     = document.getElementById('timer');
+    const playback    = document.getElementById('audioPlayback');
+    const sendBtn     = document.getElementById('sendBtn');
+    const statusEl    = document.getElementById('status');
+
+    let mediaRecorder, audioChunks = [], audioBlob = null, timerInterval, elapsed = 0;
+
+    function fmt(s) { return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); }
+
+    recordBtn.addEventListener('click', async function() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+        mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+        mediaRecorder.onstop = function() {
+          stream.getTracks().forEach(t => t.stop());
+          audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          playback.src = URL.createObjectURL(audioBlob);
+          playback.style.display = 'block';
+          sendBtn.style.display = 'inline-block';
+          statusEl.textContent = 'Recording ready. Preview it above, then click "Use this recording".';
+        };
+        mediaRecorder.start();
+        elapsed = 0;
+        recordBtn.classList.add('recording');
+        recordBtn.disabled = true;
+        stopBtn.style.display = 'inline-block';
+        sendBtn.style.display = 'none';
+        timerEl.textContent = fmt(0) + ' / ' + fmt(MAX_SECONDS);
+        timerInterval = setInterval(function() {
+          elapsed++;
+          timerEl.textContent = fmt(elapsed) + ' / ' + fmt(MAX_SECONDS);
+          if (elapsed >= MAX_SECONDS) stopRecording();
+        }, 1000);
+      } catch(err) {
+        statusEl.textContent = 'Microphone error: ' + err.message;
+      }
+    });
+
+    function stopRecording() {
+      clearInterval(timerInterval);
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+      stopBtn.style.display = 'none';
+      recordBtn.classList.remove('recording');
+      recordBtn.disabled = false;
+    }
+    stopBtn.addEventListener('click', stopRecording);
+
+    sendBtn.addEventListener('click', function() {
+      if (!audioBlob) return;
+      statusEl.textContent = 'Sending to form…';
+      sendBtn.disabled = true;
+      const reader = new FileReader();
+      reader.onloadend = function() {
+        if (window.opener) {
+          window.opener.postMessage({ type: 'AUDIO_DATA', dataUrl: reader.result }, '*');
+          statusEl.textContent = 'Sent! This window will close.';
+          setTimeout(() => window.close(), 800);
+        } else {
+          statusEl.textContent = 'Error: could not reach the parent window.';
+          sendBtn.disabled = false;
+        }
+      };
+      reader.readAsDataURL(audioBlob);
+    });
+  </script>
+</body>
+</html>
