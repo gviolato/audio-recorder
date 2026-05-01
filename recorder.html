@@ -99,15 +99,29 @@
 
     function fmt(s) { return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
 
+    // Escolhe o formato suportado pelo browser (iOS não suporta webm)
+    function getSupportedMimeType() {
+      const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+      for (const type of types) {
+        if (MediaRecorder.isTypeSupported(type)) return type;
+      }
+      return '';
+    }
+
     recordBtn.addEventListener('click', async function() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        statusEl.textContent = 'Seu navegador não suporta gravação de áudio. Tente Chrome ou Safari atualizado.';
+        return;
+      }
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
+        const mimeType = getSupportedMimeType();
+        mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
         audioChunks = [];
         mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
         mediaRecorder.onstop = function() {
           stream.getTracks().forEach(t => t.stop());
-          audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
           playback.src = URL.createObjectURL(audioBlob);
           playback.style.display = 'block';
           sendBtn.style.display = 'block';
@@ -125,7 +139,13 @@
           if (elapsed >= MAX_SECONDS) stopRecording();
         }, 1000);
       } catch (err) {
-        statusEl.textContent = 'Erro ao acessar microfone: ' + err.message;
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          statusEl.textContent = 'Permissão de microfone negada. Toque no ícone de cadeado/câmera na barra do navegador e permita o microfone.';
+        } else if (err.name === 'NotFoundError') {
+          statusEl.textContent = 'Nenhum microfone encontrado neste dispositivo.';
+        } else {
+          statusEl.textContent = 'Erro ao acessar microfone: ' + err.message;
+        }
       }
     });
 
@@ -143,8 +163,9 @@
       sendBtn.disabled = true;
       const reader = new FileReader();
       reader.onloadend = function() {
-        if (window.opener) {
-          window.opener.postMessage({ type: 'AUDIO_DATA', dataUrl: reader.result }, '*');
+        const target = window.opener || (window.parent !== window ? window.parent : null);
+        if (target) {
+          target.postMessage({ type: 'AUDIO_DATA', dataUrl: reader.result }, '*');
           statusEl.textContent = 'Enviado! Esta janela será fechada.';
           setTimeout(() => window.close(), 800);
         } else {
